@@ -20,12 +20,13 @@
  *   * rootObject (optional) - the root object to add the click listeners to and render robot markers to
  *   * withOrientation (optional) - if the Navigator should consider the robot orientation (default: false)
  */
-NAV2D.Navigator = function(options) {
+ NAV2D.Navigator = function(options) {
   var that = this;
   options = options || {};
   var ros = options.ros;
   var tfClient = options.tfClient || null;
   var robot_pose = options.robot_pose || '/robot_pose';
+  var topicName = options.topicName || '/whill/wagon_nav/request';
   var serverName = options.serverName || '/move_base';
   var actionName = options.actionName || 'move_base_msgs/MoveBaseAction';
   var withOrientation = options.withOrientation || false;
@@ -36,34 +37,24 @@ NAV2D.Navigator = function(options) {
   
   var currentGoal;
 
-  // setup the actionlib client
-  var actionClient = new ROSLIB.ActionClient({
+  // setup the publisher
+  var goalPub = new ROSLIB.Topic({
     ros : ros,
-    actionName : actionName,
-    serverName : serverName
+    name : topicName,
+    messageType : 'geometry_msgs/PoseStamped'
   });
 
   /**
-   * Send a goal to the navigation stack with the given pose.
+   * Send a goal to the global_navigation.cpp with the given pose.
    *
    * @param pose - the goal pose
    */
   function sendGoal(pose) {
     // create a goal
-    var goal = new ROSLIB.Goal({
-      actionClient : actionClient,
-      goalMessage : {
-        target_pose : {
-          header : {
-            frame_id : '/map'
-          },
-          pose : pose
-        }
-      }
+    var goalmsg = new ROSLIB.Message({
+      pose : pose
     });
-    goal.send();
-    
-    that.currentGoal = goal;
+    goalPub.publish(goalmsg);
 
     // create a marker for the goal
     if (that.goalMarker === null) {
@@ -72,14 +63,14 @@ NAV2D.Navigator = function(options) {
           size: 2.5,
           image: use_image,
           alpha: 0.7,
-          pulse: true
+          pulse: false
         });
       } else {
         that.goalMarker = new ROS2D.NavigationArrow({
           size: 15,
           strokeSize: 1,
           fillColor: createjs.Graphics.getRGB(255, 64, 128, 0.66),
-          pulse: true
+          pulse: false
         });
       }
       that.rootObject.addChild(that.goalMarker);
@@ -90,19 +81,10 @@ NAV2D.Navigator = function(options) {
     that.goalMarker.scaleX = 1.0 / stage.scaleX;
     that.goalMarker.scaleY = 1.0 / stage.scaleY;
 
-    goal.on('result', function() {
-      that.rootObject.removeChild(that.goalMarker);
-    });
+    // goal.on('result', function() {
+    //   that.rootObject.removeChild(that.goalMarker);
+    // });
   }
-  
-  /**
-   * Cancel the currently active goal.
-   */
-  this.cancelGoal = function () {
-    if (typeof that.currentGoal !== 'undefined') {
-      that.currentGoal.cancel();
-    }
-  };
 
   // get a handle to the stage
   var stage;
@@ -112,20 +94,23 @@ NAV2D.Navigator = function(options) {
     stage = that.rootObject.getStage();
   }
 
+  //enable touchscreen if the device supported
+  createjs.Touch.enable(stage);
+
   // marker for the robot
   var robotMarker = null;
   if (use_image && ROS2D.hasOwnProperty('ImageNavigator')) {
     robotMarker = new ROS2D.ImageNavigator({
       size: 2.5,
       image: use_image,
-      pulse: true
+      pulse: false
     });
   } else {
     robotMarker = new ROS2D.NavigationArrow({
-      size : 25,
+      size : 15,
       strokeSize : 1,
       fillColor : createjs.Graphics.getRGB(255, 128, 0, 0.66),
-      pulse : true
+      pulse : false
     });
   }
 
